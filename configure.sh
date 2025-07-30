@@ -72,7 +72,7 @@ print_success "UFW installed"
 
 # 4. Create admin user
 print_status "Creating $USERNAME user..."
-if id "$USERNAME" &>/dev/null; then
+if getent passwd "$USERNAME" >/dev/null 2>&1; then
     print_warning "User $USERNAME already exists, skipping creation"
 else
     adduser --gecos "" --disabled-password "$USERNAME"
