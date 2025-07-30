@@ -133,11 +133,6 @@ AllowAgentForwarding no
 GatewayPorts clientspecified
 PermitTunnel no
 
-# Disable tunnelling for everyone by default, except for admin
-AllowTcpForwarding no
-Match User $USERNAME
-    AllowTcpForwarding yes
-
 # Host-based authentication
 HostbasedAuthentication no
 IgnoreRhosts yes
@@ -160,6 +155,11 @@ MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha2-256,h
 
 # Banner
 Banner /etc/ssh/banner
+
+# Disable tunnelling for everyone by default, except for admin
+AllowTcpForwarding no
+Match User $USERNAME
+    AllowTcpForwarding yes
 EOF
 
 # Create SSH banner
