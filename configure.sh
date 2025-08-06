@@ -266,6 +266,24 @@ failregex = ^%(__prefix_line)sAuthentication failure for .* from <HOST>
 ignoreregex =
 EOF
 
+# Create sshd-ddos filter for detecting SSH flood attacks
+cat > /etc/fail2ban/filter.d/sshd-ddos.conf << EOF
+[Definition]
+# Detect SSH DDoS attacks - rapid connections and disconnections
+failregex = ^%(__prefix_line)sConnection from <HOST> port \d+
+            ^%(__prefix_line)sConnection closed by <HOST> port \d+ \[preauth\]
+            ^%(__prefix_line)sDisconnected from <HOST> port \d+ \[preauth\]
+            ^%(__prefix_line)sReceived disconnect from <HOST> port \d+:\d+: .*\[preauth\]
+            ^%(__prefix_line)sConnection reset by <HOST> port \d+ \[preauth\]
+            ^%(__prefix_line)sSSH: Server;Ltype: Version;Remote: <HOST>-\d+;Protocol:
+            ^%(__prefix_line)sKex protocol error: type 100 seq \d+.*from <HOST>
+
+ignoreregex =
+
+# Note: This filter detects rapid SSH connections that may indicate DDoS
+# It focuses on connection events rather than authentication failures
+EOF
+
 # Create port scan detection filter
 cat > /etc/fail2ban/filter.d/port-scan.conf << EOF
 [Definition]
