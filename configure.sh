@@ -6,7 +6,7 @@
 # If no username is provided, defaults to 'qadmin'
 
 # Critical Warning: After running this script, you'll only be able to connect via SSH on port 31221 
-# using the qladmin user with key-based authentication. Make sure to test the connection before closing 
+# using the qadmin user with key-based authentication. Make sure to test the connection before closing 
 # your current session!
 
 set -e  # Exit on any error
@@ -89,12 +89,7 @@ else
     print_warning "Then add your public key to /home/$USERNAME/.ssh/authorized_keys"
 fi
 
-# 5. Backup original SSH config
-print_status "Backing up original SSH configuration..."
-cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)
-print_success "SSH config backed up"
-
-# 6. Configure SSH hardening
+# 5. Configure SSH hardening
 print_status "Configuring SSH hardening..."
 cat > /etc/ssh/sshd_config << EOF
 # SSH Configuration - Security Hardened
@@ -164,18 +159,20 @@ EOF
 
 # Create SSH banner
 cat > /etc/ssh/banner << EOF
-***************************************************************************
-                            AUTHORIZED ACCESS ONLY
-***************************************************************************
-This system is for authorized users only. All activities are monitored
-and logged. Unauthorized access is strictly prohibited and will be
-prosecuted to the full extent of the law.
-***************************************************************************
+ ▗▄▖ ▗▖ ▗▖▗▄▄▄▖▗▖ ▗▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖▗▄▄▄▄▖ ▗▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▖ ▗▖  ▗▖
+▐▌ ▐▌▐▌ ▐▌  █  ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌  █     ▗▞▘▐▌ ▐▌ █    █  ▐▌ ▐▌▐▛▚▖▐▌
+▐▛▀▜▌▐▌ ▐▌  █  ▐▛▀▜▌▐▌ ▐▌▐▛▀▚▖  █   ▗▞▘  ▐▛▀▜▌ █    █  ▐▌ ▐▌▐▌ ▝▜▌
+▐▌ ▐▌▝▚▄▞▘  █  ▐▌ ▐▌▝▚▄▞▘▐▌ ▐▌▗▄█▄▖▐▙▄▄▄▖▐▌ ▐▌ █  ▗▄█▄▖▝▚▄▞▘▐▌  ▐▌
+             ▗▄▄▖ ▗▄▄▄▖▗▄▄▄▖ ▗▖ ▗▖▗▄▄▄▖▗▄▄▖ ▗▄▄▄▖▗▄▄▄             
+             ▐▌ ▐▌▐▌   ▐▌ ▐▌ ▐▌ ▐▌  █  ▐▌ ▐▌▐▌   ▐▌  █            
+             ▐▛▀▚▖▐▛▀▀▘▐▌ ▐▌ ▐▌ ▐▌  █  ▐▛▀▚▖▐▛▀▀▘▐▌  █            
+             ▐▌ ▐▌▐▙▄▄▖▐▙▄▟▙▖▝▚▄▞▘▗▄█▄▖▐▌ ▐▌▐▙▄▄▖▐▙▄▄▀            
+
 EOF
 
 print_success "SSH configuration hardened"
 
-# 7. Configure fail2ban
+# 6. Configure fail2ban
 print_status "Configuring fail2ban..."
 
 # Create fail2ban local configuration
@@ -230,7 +227,7 @@ EOF
 
 print_success "fail2ban configured"
 
-# 8. Configure UFW
+# 7. Configure UFW
 print_status "Configuring UFW firewall..."
 
 # Reset UFW to defaults
@@ -248,7 +245,7 @@ ufw --force enable
 
 print_success "UFW firewall configured and enabled"
 
-# 9. Start and enable services
+# 8. Start and enable services
 print_status "Starting and enabling services..."
 
 # Test SSH configuration
@@ -312,7 +309,6 @@ Root SSH: Disabled
 
 Important Files:
 - SSH Config: /etc/ssh/sshd_config
-- SSH Backup: /etc/ssh/sshd_config.backup.*
 - fail2ban Config: /etc/fail2ban/jail.local
 - UFW Status: ufw status
 
