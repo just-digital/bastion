@@ -2,23 +2,19 @@
 
 # Ubuntu Server Security Hardening Script
 # This script installs fail2ban, hardens SSH, configures UFW, and creates admin user
-# Usage: sudo ./configure.sh [username]
-# If no username is provided, defaults to 'qadmin'
+# Usage: sudo ./configure.sh [username] [ip_whitelist]
+#   - username: Admin user to create (defaults to 'qadmin')
+#   - ip_whitelist: Comma-separated list of IPs that fail2ban should never ban (e.g., "192.168.1.100,10.0.0.5")
 
 # Critical Warning: After running this script, you'll only be able to connect via SSH on port 31221 
-# using the qadmin user with key-based authentication. Make sure to test the connection before closing 
+# using the admin user with key-based authentication. Make sure to test the connection before closing 
 # your current session!
 
 set -e  # Exit on any error
 
 # Parse command line arguments
 USERNAME="${1:-qadmin}"
-
-# Validate username
-if [[ ! "$USERNAME" =~ ^[a-z][a-z0-9_-]*$ ]]; then
-    echo "Error: Username must start with a lowercase letter and contain only lowercase letters, numbers, hyphens, and underscores"
-    exit 1
-fi
+IP_WHITELIST="${2:-}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -51,6 +47,29 @@ print_error() {
 if [[ $EUID -ne 0 ]]; then
    print_error "This script must be run as root (use sudo)"
    exit 1
+fi
+
+# Validate username
+if [[ ! "$USERNAME" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+    print_error "Username must start with a lowercase letter and contain only lowercase letters, numbers, hyphens, and underscores"
+    exit 1
+fi
+
+# Validate IP whitelist format if provided
+if [[ -n "$IP_WHITELIST" ]]; then
+    IFS=',' read -ra IPS <<< "$IP_WHITELIST"
+    for ip in "${IPS[@]}"; do
+        # Trim whitespace
+        ip=$(echo "$ip" | xargs)
+        # Basic IP validation (IPv4 and IPv6 CIDR notation supported)
+        if ! [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]] && \
+           ! [[ "$ip" =~ ^([0-9a-fA-F:]+)(/[0-9]{1,3})?$ ]]; then
+            print_error "Invalid IP address format: $ip"
+            print_error "Valid formats: 192.168.1.100, 10.0.0.0/24, 2001:db8::/32"
+            exit 1
+        fi
+    done
+    print_status "IP whitelist validated: $IP_WHITELIST"
 fi
 
 print_status "Starting Ubuntu server security hardening..."
@@ -184,6 +203,14 @@ findtime = 600
 maxretry = 3
 backend = systemd
 
+# IP Whitelist - these IPs will never be banned
+$(if [[ -n "$IP_WHITELIST" ]]; then
+    # Replace commas with spaces for fail2ban format
+    echo "ignoreip = 127.0.0.1/8 ::1 ${IP_WHITELIST//,/ }"
+else
+    echo "ignoreip = 127.0.0.1/8 ::1"
+fi)
+
 # Email notifications (configure as needed)
 # destemail = admin@yourdomain.com
 # sendername = Fail2Ban
@@ -213,9 +240,11 @@ filter = port-scan
 logpath = /var/log/syslog
           /var/log/kern.log
           /var/log/ufw.log
-maxretry = 5
-findtime = 300
-bantime = 86400
+maxretry = 2
+findtime = 1209600
+# 2 weeks = 1209600 seconds
+bantime = 31536000
+# 1 year = 31536000 seconds
 action = %(banaction)s[name=%(__name__)s, port="0:65535", protocol="tcp"]
          %(banaction)s[name=%(__name__)s, port="0:65535", protocol="udp"]
 EOF
@@ -240,16 +269,25 @@ EOF
 # Create port scan detection filter
 cat > /etc/fail2ban/filter.d/port-scan.conf << EOF
 [Definition]
-# Detect port scanning attempts - connection refused or dropped
+# Detect port scanning attempts - any connection attempt to closed/blocked ports
+# This will catch ANY attempt to connect to a port that's not explicitly allowed
 failregex = kernel: \[.*\] IPT-DROP.* SRC=<HOST> DST=.* DPT=(\d+)
             kernel: \[.*\] UFW BLOCK.* SRC=<HOST> DST=.* DPT=(\d+)
             \[UFW BLOCK\].* SRC=<HOST> DST=.* DPT=(\d+)
             refused connect from .* \(<HOST>\)
+            kernel: .*REJECT.* SRC=<HOST> DST=.* DPT=(\d+)
+            kernel: .*DROP.* SRC=<HOST> DST=.* DPT=(\d+)
+            .*Connection refused.* from <HOST>
+            .*iptables.* SRC=<HOST>.* DPT=(\d+)
             
 ignoreregex =
 
 # Custom date pattern for kernel messages
 datepattern = %%b %%d %%H:%%M:%%S
+               %%Y-%%m-%%d %%H:%%M:%%S
+               
+# Note: With maxretry=2 and findtime=2 weeks, any IP trying more than 2 different
+# ports within 2 weeks will be banned for 1 year
 EOF
 
 print_success "fail2ban configured"
@@ -300,7 +338,10 @@ print_status "Security hardening completed!"
 echo
 print_success "=== SECURITY HARDENING SUMMARY ==="
 echo -e "${GREEN}✓${NC} fail2ban installed and configured"
-echo -e "${GREEN}✓${NC} Port scan detection enabled (5+ ports = 24hr ban)"
+if [[ -n "$IP_WHITELIST" ]]; then
+    echo -e "${GREEN}✓${NC} IP whitelist configured: ${IP_WHITELIST}"
+fi
+echo -e "${GREEN}✓${NC} Port scan detection enabled (>2 ports in 2 weeks = 1 year ban)"
 echo -e "${GREEN}✓${NC} SSH hardened (Port: ${SSH_PORT})"
 echo -e "${GREEN}✓${NC} UFW firewall enabled with high logging"
 echo -e "${GREEN}✓${NC} User '$USERNAME' created"
@@ -314,6 +355,9 @@ echo -e "   ${BLUE}sudo -u $USERNAME ssh-keygen -t ed25519 -C '$USERNAME@$(hostn
 echo -e "${YELLOW}3.${NC} Add your public key to: ${BLUE}/home/$USERNAME/.ssh/authorized_keys${NC}"
 echo -e "${YELLOW}4.${NC} Test SSH connection on port ${SSH_PORT} before logging out:"
 echo -e "   ${BLUE}ssh -p ${SSH_PORT} $USERNAME@$(hostname -I | awk '{print $1}')${NC}"
+if [[ -n "$IP_WHITELIST" ]]; then
+    echo -e "${YELLOW}5.${NC} Whitelisted IPs will never be banned: ${BLUE}${IP_WHITELIST}${NC}"
+fi
 
 echo
 print_warning "=== FIREWALL STATUS ==="
@@ -328,6 +372,13 @@ print_error "=== CRITICAL WARNING ==="
 print_error "Your SSH port has been changed to ${SSH_PORT}"
 print_error "Make sure you can connect with the $USERNAME user before closing this session!"
 print_error "Test command: ssh -p ${SSH_PORT} $USERNAME@your_server_ip"
+echo
+print_warning "=== STRICT PORT SCAN PROTECTION ==="
+print_warning "Any IP attempting to access more than 2 ports within 2 weeks will be BANNED FOR 1 YEAR"
+print_warning "Ensure all legitimate users know the correct port (${SSH_PORT}) to avoid accidental bans"
+if [[ -n "$IP_WHITELIST" ]]; then
+    print_success "Whitelisted IPs are protected from bans: ${IP_WHITELIST}"
+fi
 
 # Create a quick reference file
 cat > /root/security_hardening_info.txt << EOF
@@ -337,6 +388,7 @@ Date: $(date)
 SSH Port: ${SSH_PORT}
 Admin User: $USERNAME
 Root SSH: Disabled
+IP Whitelist: ${IP_WHITELIST:-None configured}
 
 Important Files:
 - SSH Config: /etc/ssh/sshd_config
@@ -346,15 +398,27 @@ Important Files:
 Useful Commands:
 - Check fail2ban status: fail2ban-client status
 - Check port scan jail: fail2ban-client status port-scan
+- List banned IPs (port scan): fail2ban-client get port-scan banned
+- Show whitelisted IPs: fail2ban-client get <jail> ignoreip
+- Add IP to whitelist: fail2ban-client set <jail> addignoreip <IP>
+- Remove IP from whitelist: fail2ban-client set <jail> delignoreip <IP>
 - Unban IP from SSH: fail2ban-client set sshd unbanip <IP>
 - Unban IP from port scan: fail2ban-client set port-scan unbanip <IP>
+- Check port scan logs: grep "UFW BLOCK" /var/log/ufw.log | tail -20
 - UFW status: ufw status verbose
 - SSH config test: sshd -t
 
 Port Scan Protection:
-- Detects IPs attempting to connect to 5+ different ports within 5 minutes
-- Automatically bans detected port scanners for 24 hours
-- Logs available in: /var/log/ufw.log, /var/log/syslog
+- Detects IPs attempting to connect to more than 2 ports within 2 weeks
+- Automatically bans detected port scanners for 1 YEAR (365 days)
+- Zero tolerance policy: legitimate users should only access authorized ports
+- Monitors all blocked/refused connections via UFW and kernel logs
+- Logs available in: /var/log/ufw.log, /var/log/syslog, /var/log/kern.log
+
+IP Whitelist:
+- Whitelisted IPs: ${IP_WHITELIST:-None}
+- These IPs will never be banned by fail2ban
+- To modify whitelist after setup, edit /etc/fail2ban/jail.local
 
 Remember to:
 1. Set password for $USERNAME
