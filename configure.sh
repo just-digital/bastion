@@ -245,8 +245,7 @@ findtime = 1209600
 # 2 weeks = 1209600 seconds
 bantime = 31536000
 # 1 year = 31536000 seconds
-action = %(banaction)s[name=%(__name__)s, port="0:65535", protocol="tcp"]
-         %(banaction)s[name=%(__name__)s, port="0:65535", protocol="udp"]
+action = iptables-allports[name=port-scan]
 EOF
 
 # Create custom filter for SSH attacks
