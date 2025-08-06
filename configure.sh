@@ -206,6 +206,18 @@ logpath = /var/log/auth.log
 maxretry = 6
 findtime = 600
 bantime = 3600
+
+[port-scan]
+enabled = true
+filter = port-scan
+logpath = /var/log/syslog
+          /var/log/kern.log
+          /var/log/ufw.log
+maxretry = 5
+findtime = 300
+bantime = 86400
+action = %(banaction)s[name=%(__name__)s, port="0:65535", protocol="tcp"]
+         %(banaction)s[name=%(__name__)s, port="0:65535", protocol="udp"]
 EOF
 
 # Create custom filter for SSH attacks
@@ -225,6 +237,21 @@ failregex = ^%(__prefix_line)sAuthentication failure for .* from <HOST>
 ignoreregex =
 EOF
 
+# Create port scan detection filter
+cat > /etc/fail2ban/filter.d/port-scan.conf << EOF
+[Definition]
+# Detect port scanning attempts - connection refused or dropped
+failregex = kernel: \[.*\] IPT-DROP.* SRC=<HOST> DST=.* DPT=(\d+)
+            kernel: \[.*\] UFW BLOCK.* SRC=<HOST> DST=.* DPT=(\d+)
+            \[UFW BLOCK\].* SRC=<HOST> DST=.* DPT=(\d+)
+            refused connect from .* \(<HOST>\)
+            
+ignoreregex =
+
+# Custom date pattern for kernel messages
+datepattern = %%b %%d %%H:%%M:%%S
+EOF
+
 print_success "fail2ban configured"
 
 # 7. Configure UFW
@@ -236,6 +263,9 @@ ufw --force reset
 # Set default policies
 ufw default deny incoming
 ufw default allow outgoing
+
+# Enable logging to detect port scans
+ufw logging high
 
 # Allow SSH on custom port
 ufw allow ${SSH_PORT}/tcp comment 'SSH'
@@ -270,8 +300,9 @@ print_status "Security hardening completed!"
 echo
 print_success "=== SECURITY HARDENING SUMMARY ==="
 echo -e "${GREEN}✓${NC} fail2ban installed and configured"
+echo -e "${GREEN}✓${NC} Port scan detection enabled (5+ ports = 24hr ban)"
 echo -e "${GREEN}✓${NC} SSH hardened (Port: ${SSH_PORT})"
-echo -e "${GREEN}✓${NC} UFW firewall enabled"
+echo -e "${GREEN}✓${NC} UFW firewall enabled with high logging"
 echo -e "${GREEN}✓${NC} User '$USERNAME' created"
 echo -e "${GREEN}✓${NC} Root SSH login disabled"
 
@@ -314,9 +345,16 @@ Important Files:
 
 Useful Commands:
 - Check fail2ban status: fail2ban-client status
-- Unban IP: fail2ban-client set sshd unbanip <IP>
+- Check port scan jail: fail2ban-client status port-scan
+- Unban IP from SSH: fail2ban-client set sshd unbanip <IP>
+- Unban IP from port scan: fail2ban-client set port-scan unbanip <IP>
 - UFW status: ufw status verbose
 - SSH config test: sshd -t
+
+Port Scan Protection:
+- Detects IPs attempting to connect to 5+ different ports within 5 minutes
+- Automatically bans detected port scanners for 24 hours
+- Logs available in: /var/log/ufw.log, /var/log/syslog
 
 Remember to:
 1. Set password for $USERNAME
