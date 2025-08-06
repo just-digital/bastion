@@ -337,8 +337,38 @@ print_status "Starting and enabling services..."
 # Test SSH configuration
 if sshd -t; then
     print_success "SSH configuration is valid"
-    systemctl restart sshd
-    systemctl enable sshd
+    
+    # Determine the correct SSH service name
+    if systemctl is-enabled ssh >/dev/null 2>&1; then
+        SSH_SERVICE="ssh"
+    elif systemctl is-enabled sshd >/dev/null 2>&1; then
+        SSH_SERVICE="sshd"
+    else
+        # Try to find the active SSH service
+        if systemctl is-active ssh >/dev/null 2>&1; then
+            SSH_SERVICE="ssh"
+        elif systemctl is-active sshd >/dev/null 2>&1; then
+            SSH_SERVICE="sshd"
+        else
+            SSH_SERVICE="ssh"  # Default to ssh on Ubuntu/Debian
+        fi
+    fi
+    
+    print_status "Using SSH service: $SSH_SERVICE"
+    systemctl restart $SSH_SERVICE
+    
+    # Try to enable, but don't fail if it's already enabled or linked
+    if ! systemctl enable $SSH_SERVICE 2>/dev/null; then
+        print_warning "Could not enable $SSH_SERVICE service (may already be enabled or linked)"
+        # Check if it's actually enabled
+        if systemctl is-enabled $SSH_SERVICE >/dev/null 2>&1; then
+            print_success "$SSH_SERVICE service is already enabled"
+        else
+            print_warning "$SSH_SERVICE service enable status unclear, but continuing..."
+        fi
+    else
+        print_success "$SSH_SERVICE service enabled"
+    fi
 else
     print_error "SSH configuration is invalid! Please check the configuration."
     exit 1
