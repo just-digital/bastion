@@ -252,16 +252,15 @@ EOF
 # Create custom filter for SSH attacks
 cat > /etc/fail2ban/filter.d/sshd-aggressive.conf << EOF
 [Definition]
-failregex = ^%(__prefix_line)sAuthentication failure for .* from <HOST>
-            ^%(__prefix_line)sUser .* from <HOST> not allowed because not listed in AllowUsers
-            ^%(__prefix_line)sUser .* from <HOST> not allowed because listed in DenyUsers
-            ^%(__prefix_line)sUser .* from <HOST> not allowed because not in any group
-            ^%(__prefix_line)srefused connect from \S+ \(<HOST>\)
-            ^%(__prefix_line)sReceived disconnect from <HOST>: 3: .*: Auth fail [preauth]
-            ^%(__prefix_line)sSSH: Server;Ltype: Authname;Remote: <HOST>-\d+;Name: [^;]*;Reason: (.*)
-            ^%(__prefix_line)sConnection closed by authenticating user .* <HOST> port .* \[preauth\]
-            ^%(__prefix_line)sFailed .* for .* from <HOST>(?: port \d*)?(?: ssh\d*)?
-            ^%(__prefix_line)sInvalid user .* from <HOST>
+failregex = ^.*sshd.*: Authentication failure for .* from <HOST>
+            ^.*sshd.*: User .* from <HOST> not allowed because not listed in AllowUsers
+            ^.*sshd.*: User .* from <HOST> not allowed because listed in DenyUsers
+            ^.*sshd.*: User .* from <HOST> not allowed because not in any group
+            ^.*sshd.*: refused connect from \S+ \(<HOST>\)
+            ^.*sshd.*: Received disconnect from <HOST>: 3: .*: Auth fail \[preauth\]
+            ^.*sshd.*: Connection closed by authenticating user .* <HOST> port .* \[preauth\]
+            ^.*sshd.*: Failed .* for .* from <HOST>(?: port \d*)?(?: ssh\d*)?
+            ^.*sshd.*: Invalid user .* from <HOST>
 
 ignoreregex =
 EOF
@@ -270,13 +269,13 @@ EOF
 cat > /etc/fail2ban/filter.d/sshd-ddos.conf << EOF
 [Definition]
 # Detect SSH DDoS attacks - rapid connections and disconnections
-failregex = ^%(__prefix_line)sConnection from <HOST> port \d+
-            ^%(__prefix_line)sConnection closed by <HOST> port \d+ \[preauth\]
-            ^%(__prefix_line)sDisconnected from <HOST> port \d+ \[preauth\]
-            ^%(__prefix_line)sReceived disconnect from <HOST> port \d+:\d+: .*\[preauth\]
-            ^%(__prefix_line)sConnection reset by <HOST> port \d+ \[preauth\]
-            ^%(__prefix_line)sSSH: Server;Ltype: Version;Remote: <HOST>-\d+;Protocol:
-            ^%(__prefix_line)sKex protocol error: type 100 seq \d+.*from <HOST>
+failregex = ^.*sshd.*: Connection from <HOST> port \d+
+            ^.*sshd.*: Connection closed by <HOST> port \d+ \[preauth\]
+            ^.*sshd.*: Disconnected from <HOST> port \d+ \[preauth\]
+            ^.*sshd.*: Received disconnect from <HOST> port \d+:\d+: .*\[preauth\]
+            ^.*sshd.*: Connection reset by <HOST> port \d+ \[preauth\]
+            ^.*sshd.*: Bad protocol version identification .* from <HOST>
+            ^.*sshd.*: Did not receive identification string from <HOST>
 
 ignoreregex =
 
